@@ -15,7 +15,8 @@ let currentRoomId = null;
 // --------------------
 init({
   appId: APP_ID,
-  websocketURI: "wss://api.instantdb.com/runtime/session",
+  websocketURI: "ws://localhost:8888/runtime/session",
+  // websocketURI: "wss://api.instantdb.com/runtime/session",
 });
 
 // Game logic
@@ -265,7 +266,11 @@ function App() {
 // Screens
 // --------------------
 function AdminBar({ setRoomId }) {
-  const { games } = useQuery({ games: {} });
+  const { isLoading, error, data } = useQuery({ games: {} });
+  if (isLoading) return <Text>Loading ...</Text>;
+  if (error) return <Text>Error: {error.message}</Text>;
+
+  const { games } = data;
   const roomId = getLocationRoom();
   const game = roomId && findGame(games, roomId);
 
@@ -432,7 +437,7 @@ function Main({ data }) {
             <View className="space-y-16">
               <View>
                 <View className="text-2xl">
-                  {convertSecondsToMinutesAndSeconds(clocks[0])}
+                  <Text>{convertSecondsToMinutesAndSeconds(clocks[0])}</Text>
                 </View>
                 <View
                   className={`w-full border ${

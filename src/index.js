@@ -1,6 +1,6 @@
 import { registerRootComponent } from "expo";
 
 // import App from "./App";
-import App from "./Toe";
+import App from "./Litoe";
 
 registerRootComponent(App);

@@ -23,6 +23,10 @@ web-build/
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+yarn-error.log*
+.yarn
+.pnp.cjs
+.pnp.loader.mjs
 
 # macOS
 .DS_Store

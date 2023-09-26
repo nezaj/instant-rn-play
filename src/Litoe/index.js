@@ -15,8 +15,7 @@ let currentRoomId = null;
 // --------------------
 init({
   appId: APP_ID,
-  websocketURI: "ws://localhost:8888/runtime/session",
-  // websocketURI: "wss://api.instantdb.com/runtime/session",
+  websocketURI: "wss://api.instantdb.com/runtime/session",
 });
 
 // Game logic
@@ -144,7 +143,7 @@ function findGame(games, roomId) {
 function getOpponentId(players, playerId) {
   if (isObserver(players, playerId)) {
     console.warn(
-      "[getOpponet] should only called be called with a valid player"
+      "[getOpponet] should only called be called with a valid player",
     );
     return;
   }
@@ -224,22 +223,22 @@ const clearLocationRoom = () => {
 const PLAYER_ID = randomHandle();
 
 // When enabled allows a player to move for their opponent
-const _DEBUG_TURN = true;
+const _DEBUG_TURN = false;
 
 // Components
 // --------------------
-function AdminButton({ onClick, children }) {
+function AdminButton({ onPress, children }) {
   return (
     <Pressable
       className="text-sm text-left outline p-2 my-2 hover:bg-slate-400"
-      onPress={onClick}
+      onPress={onPress}
     >
       {children}
     </Pressable>
   );
 }
 
-function Button({ onClick, children, disabled }) {
+function Button({ onPress, children, disabled }) {
   return (
     <Pressable
       className={`p-4 border border-solid w-32 ${
@@ -247,7 +246,7 @@ function Button({ onClick, children, disabled }) {
           ? "text-gray-300 border-gray-300"
           : "border-black hover:bg-slate-200"
       }`}
-      onPress={onClick}
+      onPress={onPress}
       disabled={disabled}
     >
       {children}
@@ -265,7 +264,7 @@ function App() {
 
 // Screens
 // --------------------
-function AdminBar({ setRoomId }) {
+function _AdminBar({ setRoomId }) {
   const { isLoading, error, data } = useQuery({ games: {} });
   if (isLoading) return <Text>Loading ...</Text>;
   if (error) return <Text>Error: {error.message}</Text>;
@@ -290,7 +289,7 @@ function AdminBar({ setRoomId }) {
           )}
           <Text>Live Rooms: {(games && games.length) || 0}</Text>
           <AdminButton
-            onClick={() => {
+            onPress={() => {
               clearLocationRoom();
               setRoomId(null);
               deleteAll();
@@ -299,7 +298,7 @@ function AdminBar({ setRoomId }) {
             <Text>Delete All Games</Text>
           </AdminButton>
           {game && (
-            <AdminButton onClick={() => resetGame(game)}>
+            <AdminButton onPress={() => resetGame(game)}>
               <Text>Reset Game</Text>
             </AdminButton>
           )}
@@ -329,10 +328,13 @@ function Main({ data }) {
   const { games } = data;
   const [roomId, setRoomId] = useState(getLocationRoom());
   const game = findGame(games, roomId);
+  const deleteAll = () => transact(games.map((g) => tx.games[g.id].delete()));
 
   // Clock countdown
   useEffect(() => {
     if (game) {
+      maybeJoin(game, PLAYER_ID);
+
       const { players, clocks, turn, outcome } = game;
       if (players.length >= 2 && players[turn] === PLAYER_ID && !outcome) {
         // New clock values
@@ -351,7 +353,7 @@ function Main({ data }) {
 
         const timerId = setInterval(
           () => transact(tx.games[game.id].update({ ...newUpdates })),
-          1000
+          1000,
         );
         return () => clearInterval(timerId);
       }
@@ -361,10 +363,9 @@ function Main({ data }) {
   // Lobby
   if (!game) {
     return (
-      <View className="flex-1 my-16">
-        <AdminBar setRoomId={setRoomId} />
+      <View className="my-16 p-4">
         <Button
-          onClick={() => {
+          onPress={() => {
             const roomId = id();
             const newGame = addPlayer(initialState(), PLAYER_ID);
             transact(tx.games[roomId].update(newGame));
@@ -374,52 +375,36 @@ function Main({ data }) {
         >
           <Text>Create Game!</Text>
         </Button>
-        <Button
-          onClick={() => {
-            const roomId = id();
-            const newGame = addPlayer(initialState(), PLAYER_ID);
-            transact(tx.games[roomId].update({ ...newGame, private: true }));
-            setLocationRoom(roomId);
-            setRoomId(roomId);
-          }}
-        >
-          <Text>Create Private Game!</Text>
-        </Button>
-        <Button
-          onClick={() => {
-            const newRoomId = window.prompt("Enter roomId");
-            if (newRoomId && findGame(games, newRoomId)) {
-              setLocationRoom(newRoomId);
-              setRoomId(newRoomId);
-            }
-          }}
-        >
-          <Text>Join Private Game</Text>
-        </Button>
-
-        <View>
+        <View className="mt-8">
           <Text className="text-xl my-2 font-bold">Games</Text>
           {games.length > 0 && (
             <View>
               {games
                 .filter((g) => !g.private)
                 .map((g) => (
-                  <Text
-                    onClick={() => {
-                      const roomId = g.id;
-                      transact(
-                        tx.games[roomId].update(addPlayer(g, PLAYER_ID))
-                      );
-                      setLocationRoom(roomId);
-                      setRoomId(roomId);
-                    }}
-                    key={g.id}
-                  >
-                    {g.players[0]}
-                  </Text>
+                  <View className="py-4 px-2 my-2 border border-black">
+                    <Text
+                      onPress={() => {
+                        const roomId = g.id;
+                        transact(
+                          tx.games[roomId].update(addPlayer(g, PLAYER_ID)),
+                        );
+                        setLocationRoom(roomId);
+                        setRoomId(roomId);
+                      }}
+                      key={g.id}
+                    >
+                      {g.players[0]}
+                    </Text>
+                  </View>
                 ))}
             </View>
           )}
+        </View>
+        <View className="mt-8">
+          <Button onPress={() => deleteAll()}>
+            <Text>Delete Games!</Text>
+          </Button>
         </View>
       </View>
     );
@@ -427,143 +412,122 @@ function Main({ data }) {
 
   // Game
   const { board, turn, outcome, players, clocks } = game;
-  maybeJoin(game, PLAYER_ID);
   return (
-    <View className="flex">
+    <View className="flex-row my-16">
       {/* Player list + clocks */}
-      <View className="flex-none w-1/4 p-4">
-        <View className="min-h-screen flex flex-col justify-center">
-          {players.length > 0 && (
-            <View className="space-y-16">
-              <View>
-                <View className="text-2xl">
-                  <Text>{convertSecondsToMinutesAndSeconds(clocks[0])}</Text>
-                </View>
-                <View
-                  className={`w-full border ${
-                    turn === 0 && !outcome && "border-green-600"
-                  }`}
-                ></View>
-                <View className={players[0] === outcome ? "bg-slate-200" : ""}>
-                  <Text>
-                    {players[0] && `${players[0]} -- ${getMarker(0)}`}
-                  </Text>
-                </View>
-              </View>
-
-              <View className="flex">
-                <Button
-                  onClick={() => {
-                    players.length === 1
-                      ? transact(tx.games[roomId].delete())
-                      : transact(
-                          tx.games[roomId].update(removePlayer(game, PLAYER_ID))
-                        );
-                    clearLocationRoom();
-                    setRoomId(null);
-                  }}
-                  disabled={
-                    isPlayer(players, PLAYER_ID) &&
-                    hasGameStarted(board) &&
-                    !isOutcome(game)
-                  }
-                >
-                  <Text>Leave game</Text>
-                </Button>
-                <Button
-                  onClick={() => {
-                    const ok = window.confirm("Are you sure?");
-                    if (ok) {
-                      const playerIdx = players.indexOf(PLAYER_ID);
-                      const winner = playerIdx === 0 ? players[1] : players[0];
-                      transact(tx.games[roomId].update({ outcome: winner }));
-                    }
-                  }}
-                  disabled={
-                    isObserver(players, PLAYER_ID) ||
-                    (isPlayer(players, PLAYER_ID) && !hasGameStarted(board)) ||
-                    isOutcome(game)
-                  }
-                >
-                  <Text>Forfeit game</Text>
-                </Button>
-              </View>
-              <View>
-                {isRematchPlayer(game, PLAYER_ID) ? (
-                  <Button
-                    onClick={() => resetGame(game, { reversePlayers: true })}
-                  >
-                    <Text>Accept rematch</Text>
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={() => offerRematch(game, PLAYER_ID)}
-                    disabled={
-                      isObserver(players, PLAYER_ID) ||
-                      (isPlayer(players, PLAYER_ID) && !isOutcome(game)) ||
-                      isRematch(game)
-                    }
-                  >
-                    <Text>
-                      {isRematch(game) ? "Rematch offered" : "Offer rematch"}
-                    </Text>
-                  </Button>
-                )}
-              </View>
-
-              <View>
-                <Text className={players[1] === outcome ? "bg-slate-200" : ""}>
-                  {players[1] && `${players[1]} -- ${getMarker(1)}`}
+      <View className="flex-1 p-4">
+        {/* Buttons */}
+        <View className="flex-row mb-4">
+          <View className="mr-1">
+            <Button
+              onPress={() => {
+                players.length === 1
+                  ? transact(tx.games[roomId].delete())
+                  : transact(
+                      tx.games[roomId].update(removePlayer(game, PLAYER_ID)),
+                    );
+                clearLocationRoom();
+                setRoomId(null);
+              }}
+              disabled={
+                isPlayer(players, PLAYER_ID) &&
+                hasGameStarted(board) &&
+                !isOutcome(game)
+              }
+            >
+              <Text>Leave game</Text>
+            </Button>
+          </View>
+          <View className="mr-1">
+            <Button
+              onPress={() => {
+                const playerIdx = players.indexOf(PLAYER_ID);
+                const winner = playerIdx === 0 ? players[1] : players[0];
+                transact(tx.games[roomId].update({ outcome: winner }));
+              }}
+              disabled={
+                isObserver(players, PLAYER_ID) ||
+                (isPlayer(players, PLAYER_ID) && !hasGameStarted(board)) ||
+                isOutcome(game)
+              }
+            >
+              <Text>Forfeit game</Text>
+            </Button>
+          </View>
+          <View>
+            {isRematchPlayer(game, PLAYER_ID) ? (
+              <Button onPress={() => resetGame(game, { reversePlayers: true })}>
+                <Text>Accept rematch</Text>
+              </Button>
+            ) : (
+              <Button
+                onPress={() => offerRematch(game, PLAYER_ID)}
+                disabled={
+                  isObserver(players, PLAYER_ID) ||
+                  (isPlayer(players, PLAYER_ID) && !isOutcome(game)) ||
+                  isRematch(game)
+                }
+              >
+                <Text>
+                  {isRematch(game) ? "Rematch offered" : "Offer rematch"}
                 </Text>
-                <View
-                  className={`w-full border ${
-                    turn === 1 && !outcome && "border-green-600"
-                  }`}
-                ></View>
-                <Text className="text-2xl">
-                  {convertSecondsToMinutesAndSeconds(clocks[1])}
-                </Text>
-              </View>
-            </View>
-          )}
+              </Button>
+            )}
+          </View>
         </View>
-      </View>
 
-      {/* Board */}
-      <View className="flex-none w-1/2 p-4">
-        <View className="min-h-screen flex flex-col items-center justify-center">
-          <AdminBar setRoomId={setRoomId} />
-          <Text className="text-center text-2xl font-bold my-2 capitalize">
-            {gameHeaderText({ players, outcome, turn })}
+        {/* Player 1 and Clock Info */}
+        <View className="mb-4">
+          <Text className="text-2xl">
+            {convertSecondsToMinutesAndSeconds(clocks[0])}
           </Text>
-          <View className="m-4 w-72">
-            {board.map((row, r) => (
-              <View key={`row-${r}`} className="flex">
-                {row.map((sq, c) => (
-                  <View
-                    key={`idx-${r}-${c}`}
-                    className={`flex justify-center w-24 h-24 border-black border-solid border text-lg ${
-                      players.length >= 2 &&
-                      !sq &&
-                      !outcome &&
-                      (_DEBUG_TURN || players[turn] === PLAYER_ID)
-                        ? "hover:cursor-pointer hover:bg-slate-200"
-                        : ""
-                    }`}
-                    onClick={() =>
-                      players.length >= 2 &&
-                      !outcome &&
-                      !board[r][c] &&
-                      (_DEBUG_TURN || players[turn] === PLAYER_ID) &&
-                      transact(tx.games[roomId].update(move(game, [r, c])))
-                    }
-                  >
+          <View
+            className={`w-full border border-2 ${
+              turn === 0 && !outcome && "border-green-600"
+            }`}
+          ></View>
+          <Text className={players[0] === outcome ? "bg-slate-200 py-4" : ""}>
+            {players[0] && `${players[0]} -- ${getMarker(0)}`}
+          </Text>
+        </View>
+
+        {/* Board */}
+        <View className="mb-4 items-center">
+          {board.map((row, r) => (
+            <View key={`row-${r}`} className="flex-row">
+              {row.map((sq, c) => (
+                <Button
+                  key={`idx-${r}-${c}`}
+                  onPress={() =>
+                    players.length >= 2 &&
+                    !outcome &&
+                    !board[r][c] &&
+                    (_DEBUG_TURN || players[turn] === PLAYER_ID) &&
+                    transact(tx.games[roomId].update(move(game, [r, c])))
+                  }
+                >
+                  <View className="items-center justify-center w-24 h-24 text-lg">
                     <Text className="text-7xl">{sq}</Text>
                   </View>
-                ))}
-              </View>
-            ))}
-          </View>
+                </Button>
+              ))}
+            </View>
+          ))}
+        </View>
+
+        {/* Player 2 and Clock Info */}
+        <View>
+          <Text className={players[1] === outcome ? "bg-slate-200 py-4" : ""}>
+            {players[1] && `${players[1]} -- ${getMarker(1)}`}
+          </Text>
+          <View
+            className={`w-full border border-2 ${
+              turn === 1 && !outcome && "border-green-600"
+            }`}
+          ></View>
+          <Text className="text-2xl">
+            {convertSecondsToMinutesAndSeconds(clocks[1])}
+          </Text>
         </View>
       </View>
     </View>
